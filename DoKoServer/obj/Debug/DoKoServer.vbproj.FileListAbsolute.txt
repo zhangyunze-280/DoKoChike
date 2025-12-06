@@ -1,0 +1,11 @@
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\bin\Debug\DoKoServer.exe.config
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\bin\Debug\DoKoServer.exe
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\bin\Debug\DoKoServer.pdb
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\bin\Debug\DoKoServer.xml
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.Resources.resources
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.vbproj.GenerateResource.cache
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.vbproj.CoreCompileInputs.cache
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.exe
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.xml
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.pdb
+C:\Users\zhangyunze\source\repos\DoKoServer\DoKoServer\obj\Debug\DoKoServer.vbprojAssemblyReference.cache
