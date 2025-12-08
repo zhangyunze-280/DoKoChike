@@ -147,109 +147,137 @@ Module MockDokoChikeServer
         Return Combine(header, data, footer)
     End Function
 
-    ' 判定要求通知コマンドに対するレスポンス（サーバー→ABT）
-    Private Function BuildJudgmentResponse(reqHeader As Byte(),reqData As Byte(),reqFooter As Byte()) As Byte()
+' 判定要求通知コマンドに対するレスポンス（どこチケ側 → ABT）
+Private Function BuildJudgmentResponse(reqHeader As Byte(),
+                                       reqData As Byte(),
+                                       reqFooter As Byte()) As Byte()
 
-        ' ヘッダを複製して、応答ヘッダとして流用
-        Dim header = CType(reqHeader.Clone(), Byte())
+    ' ====== 定数定義 ======
+    Const APP_TOTAL_LEN As Integer = 580               ' 仕様上のアプリ部総バイト数（SUM含む）
+    Const APP_NO1_TO_NO11_LEN As Integer = 576         ' 処理方向～予備まで
 
-        ' 判定要求応答のアプリデータ長は 580 byte
-        Const APP_DATA_ONLY_LEN As Integer = 580 
-        ' データ部（No.1～4）全体のサイズ
-        Const DATA_PART_TOTAL_LEN As Integer = APP_DATA_ONLY_LEN + 4
+    ' data 配列全体長 = CMD(1) + SUB(1) + LEN(2) + APP(580) = 584
+    Dim data(APP_TOTAL_LEN + 3) As Byte                ' インデックス 0～583
 
-        ’アプリデータサイズ
-        Dim appSize As Integer = DATA_PART_TOTAL_LEN  ' ← 584 を設定
-        Dim appSizeBytes = BitConverter.GetBytes(appSize)
-        Array.Copy(appSizeBytes, 0, header, 28, 4)
+    ' --- CMD / SUB / Len(アプリ部長) ---
+    data(0) = &HA4                                     ' コマンドコード
+    data(1) = &HF0                                     ' サブコード（レスポンス）
+    data(2) = CByte(APP_TOTAL_LEN And &HFF)            ' Len 下位
+    data(3) = CByte((APP_TOTAL_LEN >> 8) And &HFF)     ' Len 上位
 
-        ' データ部全体のサイズ: CMD(1) + SUB(1) + Len(2) + App(580) = 584 byte
-        Dim data(APP_DATA_ONLY_LEN + 3) As Byte 
+    ' アプリ部先頭オフセット（処理方向）
+    Dim appBase As Integer = 4
 
-        ' ---- 1. 先頭4バイト（コマンド／サブコード／Len） ----
-        data(0) = &HA4                      ' コマンドコード: 0xA4
-        data(1) = &HF0                      ' サブコード（レスポンス）: 0xF0
-        data(2) = CByte(APP_DATA_ONLY_LEN And &HFF)   ' Len (580) 下位
-        data(3) = CByte((APP_DATA_ONLY_LEN >> 8) And &HFF) ' Len (580) 上位
+    ' ====== アプリ部内オフセット（No.1～No.12） ======
+    Const OFF_PROC_DIR As Integer = 0                  ' No.1 処理方向
+    Const OFF_RES_STATUS As Integer = 1                ' No.2 応答ステータス
+    Const OFF_DETAIL As Integer = 2                    ' No.3 詳細コード
+    Const OFF_RESULT_INFO As Integer = 3               ' No.4 判定結果情報 (132)
+    Const OFF_VALID_FROM As Integer = 135              ' No.5 有効開始日 (8)
+    Const OFF_VALID_TO As Integer = 143                ' No.6 有効終了日 (8)
+    Const OFF_TICKET_NAME As Integer = 151             ' No.7 券名称 (60)
+    Const OFF_ERR_TITLE As Integer = 211               ' No.8 エラータイトル (40)
+    Const OFF_ERR_TEXT As Integer = 251                ' No.9 エラー内容テキスト (240)
+    Const OFF_ACTION_TEXT As Integer = 491             ' No.10 エラー処理テキスト (80)
+    Const OFF_RESERVED As Integer = 571                ' No.11 予備 (5)
+    Const OFF_SUM As Integer = 576                     ' No.12 サム値 (4) ※アプリ内オフセット
 
-        Dim appStart As Integer = 4
-        Dim sjisEncoding As Encoding = Encoding.GetEncoding(932)
+    Dim sjis As Encoding = Encoding.GetEncoding(932)
 
-        ' ---- 2. アプリケーションデータ部 (580バイト) の構築 ----
-    
-        ' 応答内容の主要なオフセット (Image_6f4558.png を参照)
-        Const OFFSET_PROC_DIR As Integer = 0
-        Const OFFSET_RES_STATUS As Integer = 1
-        Const OFFSET_DETAIL_CODE As Integer = 2
-        Const OFFSET_RESULT_INFO As Integer = 3
-        Const OFFSET_START_DATE As Integer = 135  ' 1 + 1 + 1 + 132 = 135
-        Const OFFSET_TITLE As Integer = 219     ' (例示のため、簡略化してオフセットを使用)
-        Const OFFSET_CONTENT As Integer = 259
-        Const OFFSET_ACTION As Integer = 499
+    ' ====== No.1: 処理方向 (1byte) ======
+    ' リクエスト側アプリ部先頭（処理方向）をそのままコピー
+    ' reqData は「CMD/SUB/LEN/APP(580)」なので、APP先頭は index 4
+    Dim reqProcDir As Byte = reqData(4)
+    data(appBase + OFF_PROC_DIR) = reqProcDir
 
-        ' a) 処理方向 (1 byte)
-        '    ABTから送られてきた判定要求通知のデータ部からコピー
-        data(appStart + OFFSET_PROC_DIR) = reqData(4) ' reqDataはCMD(1)+SUB(1)+Len(2)+App(580)のデータ部
-    
-        ' b) 応答ステータス (1 byte) - 0x00:OKを返す
-        data(appStart + OFFSET_RES_STATUS) = &H0 
-    
-        ' c) 詳細コード (1 byte) - 0x00:初期値
-        data(appStart + OFFSET_DETAIL_CODE) = &H0 
+    ' ====== No.2: 応答ステータス (1byte) ======
+    ' 0x00 = OK
+    data(appBase + OFF_RES_STATUS) = &H0
 
-        ' d) 判定結果情報 (132 bytes) - ダミーデータで埋める
-        Dim dummyResultInfo As String = New String("R"c, 66) ' 全角66文字 = 132バイト
-        sjisEncoding.GetBytes(dummyResultInfo).CopyTo(data, appStart + OFFSET_RESULT_INFO)
+    ' ====== No.3: 詳細コード (1byte) ======
+    ' とりあえず 0x00（初期値）
+    data(appBase + OFF_DETAIL) = &H0
 
-        ' e) 有効開始日 (8 bytes) - BCDで日付 "20251206" を設定
-        ' BCD(20 25 12 06)
-        data(appStart + OFFSET_START_DATE + 0) = &H20
-        data(appStart + OFFSET_START_DATE + 1) = &H25
-        data(appStart + OFFSET_START_DATE + 2) = &H12
-        data(appStart + OFFSET_START_DATE + 3) = &H06
-    
-        ' f) エラータイトル (40 bytes, Shift-JIS) - 全角文字のテスト
-        Dim titleBytes As Byte() = sjisEncoding.GetBytes("正常処理")
-        titleBytes.CopyTo(data, appStart + OFFSET_TITLE)
-    
-        ' g) エラー内容テキスト (240 bytes, Shift-JIS) - 全角文字のテスト
-        Dim contentBytes As Byte() = sjisEncoding.GetBytes("改札機 (係員向け) 画面にそのまま表示するテキスト。処理完了。")
-        contentBytes.CopyTo(data, appStart + OFFSET_CONTENT)
-    
-        ' h) エラー処置テキスト (80 bytes, Shift-JIS) - 全角文字のテスト
-        Dim actionBytes As Byte() = sjisEncoding.GetBytes("エラー処理テキスト")
-        actionBytes.CopyTo(data, appStart + OFFSET_ACTION)
+    ' ====== No.4: 判定結果情報 (132byte) ======
+    ' ダミーとして全角 'R' を 66 文字分入れる（= 132 byte）
+    Dim resultInfoStr As String = New String("R"c, 66)
+    Dim resultBytes = sjis.GetBytes(resultInfoStr)
+    Array.Clear(data, appBase + OFF_RESULT_INFO, 132)
+    Array.Copy(resultBytes, 0, data, appBase + OFF_RESULT_INFO,
+               Math.Min(resultBytes.Length, 132))
 
-        ' 残りのアプリデータ部（すべてを埋める必要がない場合）は 0x00 で埋める（既定で初期化されるため省略可）
-    
-        ' ---- 3. ヘッダ側のアプリデータ数/サイズも修正 ----
-        ' アプリデータ数 = 1 固定
-        Dim appCount As Integer = 1
-        Dim appCountBytes = BitConverter.GetBytes(appCount)
-        Array.Copy(appCountBytes, 0, header, 24, 4)  
+    ' ====== No.5,6: 有効開始日・有効終了日 (各8byte, BCD) ======
+    ' 例として 2025/12/06 ～ 2025/12/31 を BCD で設定（20 25 12 06 / 20 25 12 31）
+    ' 実際の仕様に合わせてここは調整可能
+    Dim ymdFrom As Byte() = {&H20, &H25, &H12, &H6, &H0, &H0, &H0, &H0}   ' 20251206 00000000
+    Dim ymdTo As Byte() =   {&H20, &H25, &H12, &H31, &H0, &H0, &H0, &H0}  ' 20251231 00000000
+    Array.Copy(ymdFrom, 0, data, appBase + OFF_VALID_FROM, 8)
+    Array.Copy(ymdTo, 0, data, appBase + OFF_VALID_TO, 8)
 
-        Dim sumTarget(575) As Byte
-        Array.Copy(data, appStart, sumTarget, 0, 576)
+    ' ====== No.7: 券名称 (60byte, Shift-JIS) ======
+    Dim ticketName As String = "テスト券名称"
+    Dim ticketBytes = sjis.GetBytes(ticketName)
+    Array.Clear(data, appBase + OFF_TICKET_NAME, 60)
+    Array.Copy(ticketBytes, 0, data, appBase + OFF_TICKET_NAME,
+               Math.Min(ticketBytes.Length, 60))
 
-        Dim calculatedSum As UInteger = ComputeSum(sumTarget)
+    ' ====== No.8: エラータイトル (40byte, Shift-JIS) ======
+    Dim title As String = "正常処理"
+    Dim titleBytes = sjis.GetBytes(title)
+    Array.Clear(data, appBase + OFF_ERR_TITLE, 40)
+    Array.Copy(titleBytes, 0, data, appBase + OFF_ERR_TITLE,
+               Math.Min(titleBytes.Length, 40))
 
-        Dim sumBytes = BitConverter.GetBytes(calculatedSum)
-        Array.Copy(sumBytes, 0, data, appStart + 576, 4) ' 580バイト目のアプリデータ部に格納
+    ' ====== No.9: エラー内容テキスト (240byte, Shift-JIS) ======
+    Dim errText As String = "処理完了しました。係員向け画面にそのまま表示される想定のテキストです。"
+    Dim errBytes = sjis.GetBytes(errText)
+    Array.Clear(data, appBase + OFF_ERR_TEXT, 240)
+    Array.Copy(errBytes, 0, data, appBase + OFF_ERR_TEXT,
+               Math.Min(errBytes.Length, 240))
 
-        ' ---- 4. CRC 計算＆フッタ生成 ----
-        Dim crcTarget(header.Length + data.Length - 1) As Byte
-        Buffer.BlockCopy(header, 0, crcTarget, 0, header.Length)
-        Buffer.BlockCopy(data, 0, crcTarget, header.Length, data.Length)
+    ' ====== No.10: エラー処理テキスト (80byte, Shift-JIS) ======
+    Dim actionText As String = "特別な処置は不要です。"
+    Dim actionBytes = sjis.GetBytes(actionText)
+    Array.Clear(data, appBase + OFF_ACTION_TEXT, 80)
+    Array.Copy(actionBytes, 0, data, appBase + OFF_ACTION_TEXT,
+               Math.Min(actionBytes.Length, 80))
 
-        Dim crc As UInteger = ComputeCrc32(crcTarget)
-        Dim crcBytes As Byte() = BitConverter.GetBytes(crc)
+    ' ====== No.11: 予備 (5byte, 0x00 固定) ======
+    Array.Clear(data, appBase + OFF_RESERVED, 5)
 
-        Dim footer(3) As Byte
-        Buffer.BlockCopy(crcBytes, 0, footer, 0, 4)
+    ' ====== No.12: SUM (4byte, UInt, Little Endian) ======
+    ' 「入出力データ部の①バイト単位加算結果」＝ No.1～No.11 の 576バイトを加算
+    Dim sum As UInteger = 0UI
+    For i = 0 To APP_NO1_TO_NO11_LEN - 1          ' 0 ～ 575
+        sum += CUInt(data(appBase + i))
+    Next
+    Dim sumBytes = BitConverter.GetBytes(sum)      ' LE
+    Array.Copy(sumBytes, 0, data, appBase + OFF_SUM, 4)
 
-        ' ヘッダ + データ + フッタ を結合して返す
-        Return Combine(header, data, footer)
-    End Function
+    ' ====== ヘッダ更新（AppCount / AppSize） ======
+    Dim header = CType(reqHeader.Clone(), Byte())
+
+    ' アプリデータ数 = 1 固定
+    Dim appCount As Integer = 1
+    Dim appCountBytes = BitConverter.GetBytes(appCount)
+    Array.Copy(appCountBytes, 0, header, 24, 4)    ' offset 24 ～ 27
+
+    ' アプリデータサイズ = 580（仕様どおり）
+    Dim appSizeBytes = BitConverter.GetBytes(APP_TOTAL_LEN)
+    Array.Copy(appSizeBytes, 0, header, 28, 4)     ' offset 28 ～ 31
+
+    ' ====== CRC32 計算＆フッタ生成 ======
+    Dim crcTarget(header.Length + data.Length - 1) As Byte
+    Buffer.BlockCopy(header, 0, crcTarget, 0, header.Length)
+    Buffer.BlockCopy(data, 0, crcTarget, header.Length, data.Length)
+
+    Dim crc As UInteger = ComputeCrc32(crcTarget)
+    Dim footer(3) As Byte
+    Buffer.BlockCopy(BitConverter.GetBytes(crc), 0, footer, 0, 4)
+
+    ' ヘッダ + データ + フッタ を結合
+    Return Combine(header, data, footer)
+End Function
 
     'ヘッダ、データ、フッタ結合
     Private Function Combine(header As Byte(), data As Byte(), footer As Byte()) As Byte()
