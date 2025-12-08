@@ -1,6 +1,7 @@
 ﻿Imports System.Net
 Imports System.Net.Sockets
 Imports System.Linq
+Imports System.Text
 
 Module MockDokoChikeServer
 
@@ -49,6 +50,10 @@ Module MockDokoChikeServer
                 Case (cmd = &HD1 AndAlso subc = &H0)
                     respBytes = BuildHealthResponse(header)
 
+                ' ★ 判定要求通知コマンド (0xA4 / 0x00)  ★
+                Case (cmd = &HA4 AndAlso subc = &H0)
+                    respBytes = BuildJudgmentResponse(header, data, footer)
+
                 Case Else
                     Console.WriteLine($"未知コマンド: cmd={cmd:X2}, sub={subc:X2}")
             End Select
@@ -63,7 +68,7 @@ Module MockDokoChikeServer
     End Sub
 
     ' --- 以下はさっきのまま ---
-
+    ' 認証データのレスポンス
     Private Function BuildAuthResponse(reqHeader As Byte(),
                                    reqData As Byte(),
                                    reqFooter As Byte()) As Byte()
@@ -117,6 +122,7 @@ Module MockDokoChikeServer
         Return Combine(header, data, footer)
     End Function
 
+    '死活のレスポンス
     Private Function BuildHealthResponse(reqHeader As Byte()) As Byte()
 
         ' ヘッダは基本そのまま流用（Seq やブロックNoなどはそのままでOK）
@@ -141,6 +147,111 @@ Module MockDokoChikeServer
         Return Combine(header, data, footer)
     End Function
 
+    ' 判定要求通知コマンドに対するレスポンス（サーバー→ABT）
+    Private Function BuildJudgmentResponse(reqHeader As Byte(),reqData As Byte(),reqFooter As Byte()) As Byte()
+
+        ' ヘッダを複製して、応答ヘッダとして流用
+        Dim header = CType(reqHeader.Clone(), Byte())
+
+        ' 判定要求応答のアプリデータ長は 580 byte
+        Const APP_DATA_ONLY_LEN As Integer = 580 
+        ' データ部（No.1～4）全体のサイズ
+        Const DATA_PART_TOTAL_LEN As Integer = APP_DATA_ONLY_LEN + 4
+
+        ’アプリデータサイズ
+        Dim appSize As Integer = DATA_PART_TOTAL_LEN  ' ← 584 を設定
+        Dim appSizeBytes = BitConverter.GetBytes(appSize)
+        Array.Copy(appSizeBytes, 0, header, 28, 4)
+
+        ' データ部全体のサイズ: CMD(1) + SUB(1) + Len(2) + App(580) = 584 byte
+        Dim data(APP_DATA_ONLY_LEN + 3) As Byte 
+
+        ' ---- 1. 先頭4バイト（コマンド／サブコード／Len） ----
+        data(0) = &HA4                      ' コマンドコード: 0xA4
+        data(1) = &HF0                      ' サブコード（レスポンス）: 0xF0
+        data(2) = CByte(APP_DATA_ONLY_LEN And &HFF)   ' Len (580) 下位
+        data(3) = CByte((APP_DATA_ONLY_LEN >> 8) And &HFF) ' Len (580) 上位
+
+        Dim appStart As Integer = 4
+        Dim sjisEncoding As Encoding = Encoding.GetEncoding(932)
+
+        ' ---- 2. アプリケーションデータ部 (580バイト) の構築 ----
+    
+        ' 応答内容の主要なオフセット (Image_6f4558.png を参照)
+        Const OFFSET_PROC_DIR As Integer = 0
+        Const OFFSET_RES_STATUS As Integer = 1
+        Const OFFSET_DETAIL_CODE As Integer = 2
+        Const OFFSET_RESULT_INFO As Integer = 3
+        Const OFFSET_START_DATE As Integer = 135  ' 1 + 1 + 1 + 132 = 135
+        Const OFFSET_TITLE As Integer = 219     ' (例示のため、簡略化してオフセットを使用)
+        Const OFFSET_CONTENT As Integer = 259
+        Const OFFSET_ACTION As Integer = 499
+
+        ' a) 処理方向 (1 byte)
+        '    ABTから送られてきた判定要求通知のデータ部からコピー
+        data(appStart + OFFSET_PROC_DIR) = reqData(4) ' reqDataはCMD(1)+SUB(1)+Len(2)+App(580)のデータ部
+    
+        ' b) 応答ステータス (1 byte) - 0x00:OKを返す
+        data(appStart + OFFSET_RES_STATUS) = &H0 
+    
+        ' c) 詳細コード (1 byte) - 0x00:初期値
+        data(appStart + OFFSET_DETAIL_CODE) = &H0 
+
+        ' d) 判定結果情報 (132 bytes) - ダミーデータで埋める
+        Dim dummyResultInfo As String = New String("R"c, 66) ' 全角66文字 = 132バイト
+        sjisEncoding.GetBytes(dummyResultInfo).CopyTo(data, appStart + OFFSET_RESULT_INFO)
+
+        ' e) 有効開始日 (8 bytes) - BCDで日付 "20251206" を設定
+        ' BCD(20 25 12 06)
+        data(appStart + OFFSET_START_DATE + 0) = &H20
+        data(appStart + OFFSET_START_DATE + 1) = &H25
+        data(appStart + OFFSET_START_DATE + 2) = &H12
+        data(appStart + OFFSET_START_DATE + 3) = &H06
+    
+        ' f) エラータイトル (40 bytes, Shift-JIS) - 全角文字のテスト
+        Dim titleBytes As Byte() = sjisEncoding.GetBytes("正常処理")
+        titleBytes.CopyTo(data, appStart + OFFSET_TITLE)
+    
+        ' g) エラー内容テキスト (240 bytes, Shift-JIS) - 全角文字のテスト
+        Dim contentBytes As Byte() = sjisEncoding.GetBytes("改札機 (係員向け) 画面にそのまま表示するテキスト。処理完了。")
+        contentBytes.CopyTo(data, appStart + OFFSET_CONTENT)
+    
+        ' h) エラー処置テキスト (80 bytes, Shift-JIS) - 全角文字のテスト
+        Dim actionBytes As Byte() = sjisEncoding.GetBytes("エラー処理テキスト")
+        actionBytes.CopyTo(data, appStart + OFFSET_ACTION)
+
+        ' 残りのアプリデータ部（すべてを埋める必要がない場合）は 0x00 で埋める（既定で初期化されるため省略可）
+    
+        ' ---- 3. ヘッダ側のアプリデータ数/サイズも修正 ----
+        ' アプリデータ数 = 1 固定
+        Dim appCount As Integer = 1
+        Dim appCountBytes = BitConverter.GetBytes(appCount)
+        Array.Copy(appCountBytes, 0, header, 24, 4)  
+
+        Dim sumTarget(575) As Byte
+        Array.Copy(data, appStart, sumTarget, 0, 576)
+
+        Dim calculatedSum As UInteger = ComputeSum(sumTarget)
+
+        Dim sumBytes = BitConverter.GetBytes(calculatedSum)
+        Array.Copy(sumBytes, 0, data, appStart + 576, 4) ' 580バイト目のアプリデータ部に格納
+
+        ' ---- 4. CRC 計算＆フッタ生成 ----
+        Dim crcTarget(header.Length + data.Length - 1) As Byte
+        Buffer.BlockCopy(header, 0, crcTarget, 0, header.Length)
+        Buffer.BlockCopy(data, 0, crcTarget, header.Length, data.Length)
+
+        Dim crc As UInteger = ComputeCrc32(crcTarget)
+        Dim crcBytes As Byte() = BitConverter.GetBytes(crc)
+
+        Dim footer(3) As Byte
+        Buffer.BlockCopy(crcBytes, 0, footer, 0, 4)
+
+        ' ヘッダ + データ + フッタ を結合して返す
+        Return Combine(header, data, footer)
+    End Function
+
+    'ヘッダ、データ、フッタ結合
     Private Function Combine(header As Byte(), data As Byte(), footer As Byte()) As Byte()
         Dim total = header.Length + data.Length + footer.Length
         Dim buf(total - 1) As Byte
@@ -150,6 +261,15 @@ Module MockDokoChikeServer
         Return buf
     End Function
 
+    Private Function ComputeSum(data() As Byte) As UInteger
+        Dim total As UInteger = 0
+        For Each b In data
+            total += CUInt(b)
+        Next
+        Return total
+    End Function
+
+    ’CRC計算
     Private Function ComputeCrc32(data As Byte()) As UInteger
         Const poly As UInteger = &HEDB88320UI
         Static tbl As UInteger() = Nothing
