@@ -13,6 +13,7 @@ C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\bin\Debug\DoKoServer.exe.c
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\bin\Debug\DoKoServer.exe
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\bin\Debug\DoKoServer.pdb
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\bin\Debug\DoKoServer.xml
+C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbprojAssemblyReference.cache
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.Resources.resources
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbproj.GenerateResource.cache
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbproj.CoreCompileInputs.cache
