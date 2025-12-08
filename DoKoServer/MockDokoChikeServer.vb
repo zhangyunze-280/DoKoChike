@@ -87,7 +87,7 @@ Module MockDokoChikeServer
         ' 詳細コード = 0x00 (初期値)
         data(appStart + 1) = &H0
 
-        ' 残りのアプリデータ部はひとまず 0x00 で埋める
+        ' 残りのアプリデータ部はひとまず 0x00 で埋める、なのでSUMを作る必要はない
         For i = appStart + 2 To appStart + APP_LEN - 1
             data(i) = &H0
         Next
