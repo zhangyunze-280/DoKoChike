@@ -315,6 +315,75 @@ Private Function BuildJudgmentResponse(reqHeader As Byte(),
 End Function
 
 
+        ' タンキング処理のレスポンス作成
+    Private Function BuildTankingResponse(reqHeader As Byte(),
+                                        reqData As Byte(),
+                                        reqFooter As Byte()) As Byte()
+
+
+
+        ' ヘッダ部作成 (32バイト)
+        Dim header = CType(reqHeader.Clone(), Byte())
+    
+        ' アプリデータ数とサイズを更新 (ヘッダの最後4バイト)
+        Dim appCount As Integer = 1   ' アプリデータ数は1固定
+        Dim appSize As Integer = 20   ' アプリデータサイズは20バイト固定
+    
+        ' ヘッダの28-31バイト目を更新
+        Buffer.BlockCopy(BitConverter.GetBytes(appCount), 0, header, 24, 4) ' アプリデータ数
+        Buffer.BlockCopy(BitConverter.GetBytes(appSize), 0, header, 28, 4)  ' アプリデータサイズ
+
+
+
+        ' アプリデータ部作成 (20バイト)
+        Dim data(19) As Byte  ' コマンド(1) + サブコード(1) + レングス(2) + アプリデータ(16)
+    
+        ' コマンドコードとサブコード設定
+        data(0) = &HA5        ' コマンドコード
+        data(1) = &HF0        ' サブコード (レスポンス)
+    
+        ' レングス設定 (16バイト)
+        data(2) = 16          ' レングス下位バイト
+        data(3) = 0           ' レングス上位バイト
+
+
+
+        ' アプリデータ部設定 (16バイト)
+        ' 1. 応答ステータス (1バイト)
+        data(4) = &H0         ' 0x00: OK
+    
+        ' 2. 詳細コード (1バイト)
+        data(5) = &H0         ' 0x00: 初期値
+    
+        ' 3. 予備 (10バイト)
+        For i As Integer = 6 To 15
+            data(i) = &H0     ' 0x00固定
+        Next
+    
+        ' 4. サム値計算 (4バイト)
+        Dim sum As UInteger = 0
+        For i As Integer = 4 To 15    ' アプリデータ部の1バイト単位加算
+            sum += CUInt(data(i))
+        Next
+        Buffer.BlockCopy(BitConverter.GetBytes(sum), 0, data, 16, 4)
+
+
+
+        ' フッタ作成 (CRC計算)
+        Dim crcTarget(header.Length + data.Length - 1) As Byte
+        Buffer.BlockCopy(header, 0, crcTarget, 0, header.Length)
+        Buffer.BlockCopy(data, 0, crcTarget, header.Length, data.Length)
+    
+        Dim crc As UInteger = ComputeCrc32(crcTarget)
+        Dim footer(3) As Byte
+        Buffer.BlockCopy(BitConverter.GetBytes(crc), 0, footer, 0, 4)
+
+
+
+        ' 全体を結合
+        Return Combine(header, data, footer)
+    End Function
+
     'ヘッダ、データ、フッタ結合
     Private Function Combine(header As Byte(), data As Byte(), footer As Byte()) As Byte()
         Dim total = header.Length + data.Length + footer.Length
