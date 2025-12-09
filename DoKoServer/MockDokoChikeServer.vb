@@ -158,15 +158,13 @@ Private Function BuildJudgmentResponse(reqHeader As Byte(),
 
     ' data 配列全体長 = CMD(1) + SUB(1) + LEN(2) + APP(580) = 584
     Dim data(APP_TOTAL_LEN + 3) As Byte                ' 0～583
+    Const APP_BASE As Integer = 4                      ' = OFFSET_APP_DATA 相当
 
     ' --- CMD / SUB / Len(アプリ部長) ---
     data(0) = &HA4                                     ' コマンドコード
     data(1) = &HF0                                     ' サブコード（レスポンス）
     data(2) = CByte(APP_TOTAL_LEN And &HFF)            ' Len 下位
     data(3) = CByte((APP_TOTAL_LEN >> 8) And &HFF)     ' Len 上位
-
-    ' アプリ部先頭（処理方向）の位置
-    Dim APP_BASE As Integer = 4                        ' Judge 側の OFFSET_APP_DATA と同じ
 
     ' ====== アプリ部内オフセット（No.1～No.12） ======
     Const OFF_PROC_DIR     As Integer = 0              ' No.1 処理方向             (1)
@@ -196,14 +194,44 @@ Private Function BuildJudgmentResponse(reqHeader As Byte(),
     data(APP_BASE + OFF_DETAIL) = &H0          ' とりあえず 0x00
 
     ' ====== No.4: 判定結果情報 (132byte) ======
-    Dim resultInfoStr As String = New String("R"c, 66) ' 全角66文字=132byte
-    Dim resultBytes = sjis.GetBytes(resultInfoStr)
-    Array.Clear(data, APP_BASE + OFF_RESULT_INFO, 132)
-    Array.Copy(resultBytes, 0, data, APP_BASE + OFF_RESULT_INFO,
-               Math.Min(resultBytes.Length, 132))
+    ' JudgeRequestLogic.QRcodeVerification のコメントに合わせて
+    ' [0..5]   判定日時(6B)
+    ' [6]      方向(1B)
+    ' [7..18]  券番号(12B)
+    ' [19]     媒体種別(1B)
+    ' [20]     券種分類(1B)
+    ' [21]     判定結果(1B)
+    Dim resultInfo(131) As Byte
 
-    ' ====== No.5,6: 有効開始日・有効終了日 (各8byte, BCD) ======
-    ' 例：2025/12/06～2025/12/31 (後半4byteは 00000000 としておく)
+    ' 判定日時(6B) → 仮で 2025/12/06 15:15:00 相当っぽいダミー値
+    resultInfo(0) = &H20
+    resultInfo(1) = &H25
+    resultInfo(2) = &H12
+    resultInfo(3) = &H06
+    resultInfo(4) = &H15
+    resultInfo(5) = &H15
+
+    ' 方向(1B) → リクエストの処理方向をそのままコピー
+    resultInfo(6) = reqProcDir
+
+    ' 券番号(12B) → 適当なダミー（ここでは "123456789012" 的なバイトを仮で入れる）
+    For i = 0 To 11
+        resultInfo(7 + i) = CByte(&H30 + ((i + 1) Mod 10)) ' '1'～'9','0','1',...
+    Next
+
+    ' 媒体種別(1B) → 0x02（QR）にする（ここが QR 判定ロジックのキー）
+    resultInfo(19) = &H2
+
+    ' 券種分類(1B) → 適当な 0x01
+    resultInfo(20) = &H1
+
+    ' 判定結果(1B) → 0x00（OK）。QRcodeVerification が「正常」とみなす条件。
+    resultInfo(21) = &H0
+
+    ' 残り [22..131] は 0 のままで OK
+    Array.Copy(resultInfo, 0, data, APP_BASE + OFF_RESULT_INFO, 132)
+
+    ' ====== No.5,6: 有効開始日・有効終了日 (各8byte, BCDっぽいダミー) ======
     Dim ymdFrom As Byte() = {&H20, &H25, &H12, &H06, &H0, &H0, &H0, &H0}
     Dim ymdTo   As Byte() = {&H20, &H25, &H12, &H31, &H0, &H0, &H0, &H0}
     Array.Copy(ymdFrom, 0, data, APP_BASE + OFF_VALID_FROM, 8)
@@ -240,16 +268,26 @@ Private Function BuildJudgmentResponse(reqHeader As Byte(),
     ' ====== No.11: 予備 (5byte, 0x00 固定) ======
     Array.Clear(data, APP_BASE + OFF_RESERVED, 5)
 
+    ' ====== ★ QRチェック用の媒体種別・判定結果をセット（JudgeRequestLogic と合わせる） ======
+    Const REL_MEDIA As Integer = 19      ' JudgeRequestLogic.QRcodeVerification の定義と合わせる
+    Const REL_RESULT As Integer = 21
+
+    Dim mediaIndex As Integer = APP_BASE + REL_MEDIA
+    Dim resultIndex As Integer = APP_BASE + REL_RESULT
+
+    data(mediaIndex) = &H2   ' 媒体種別 = 0x02（QR）
+    data(resultIndex) = &H0  ' 判定結果 = 0x00（OK）
+
     ' ====== No.12: SUM (4byte, UInt, Little Endian) ======
-    ' JudgeRequestLogic.CalculateSum と完全に同じロジックにする
+    ' アプリ内の 0 ～ 575（No.1～No.11）を足し算
     Dim sum As UInteger = 0UI
-    Dim appStart As Integer = APP_BASE          ' = 4
-    Dim appEndExclusive As Integer = APP_BASE + APP_NO1_TO_NO11_LEN ' = 580
-    For i As Integer = appStart To appEndExclusive - 1   ' 4～579
-        sum += CUInt(data(i))
+    For i = 0 To APP_NO1_TO_NO11_LEN - 1          ' 0 ～ 575
+        sum += CUInt(data(APP_BASE + i))          ' 実際のインデックス 4 ～ 579
     Next
-    Dim sumBytes = BitConverter.GetBytes(sum)   ' LE
-    Array.Copy(sumBytes, 0, data, APP_BASE + OFF_SUM, 4) ' 576～579
+    Dim sumBytes = BitConverter.GetBytes(sum)
+    Array.Copy(sumBytes, 0, data, APP_BASE + OFF_SUM, 4)  ' 4 + 576 = 580 ～ 583
+
+    Console.WriteLine($"[Mock] SUM計算値={sum:X8}, 書き込みバイト={BitConverter.ToString(sumBytes)}")
 
     ' ====== ヘッダ更新（AppCount / AppSize） ======
     Dim header = CType(reqHeader.Clone(), Byte())
@@ -275,6 +313,7 @@ Private Function BuildJudgmentResponse(reqHeader As Byte(),
     ' ヘッダ + データ + フッタ を結合して返す
     Return Combine(header, data, footer)
 End Function
+
 
     'ヘッダ、データ、フッタ結合
     Private Function Combine(header As Byte(), data As Byte(), footer As Byte()) As Byte()
