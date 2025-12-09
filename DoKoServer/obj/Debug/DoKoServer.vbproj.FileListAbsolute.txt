@@ -20,3 +20,14 @@ C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbpro
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.exe
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.xml
 C:\Users\zhangyunze\Source\Repos\DoKoChike\DoKoServer\obj\Debug\DoKoServer.pdb
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\bin\Debug\DoKoServer.exe.config
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\bin\Debug\DoKoServer.exe
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\bin\Debug\DoKoServer.pdb
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\bin\Debug\DoKoServer.xml
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbproj.AssemblyReference.cache
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.Resources.resources
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbproj.GenerateResource.cache
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.vbproj.CoreCompileInputs.cache
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.exe
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.xml
+C:\Users\hiwatashisho\OneDrive - cy-com.co.jp\デスクトップ\githun\DoKoChike\DoKoServer\obj\Debug\DoKoServer.pdb
