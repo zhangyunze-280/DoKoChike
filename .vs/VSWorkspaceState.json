@@ -1,9 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\DoKoServer",
-    "\\DoKoServer\\obj"
+    "\\DoKoServer"
   ],
-  "SelectedNode": "\\DoKoServer\\MockDokoChikeServer.vb",
+  "SelectedNode": "\\DoKoServer\\DoKoServer.vbproj",
   "PreviewInSolutionExplorer": false
 }
