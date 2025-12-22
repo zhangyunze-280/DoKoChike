@@ -9,8 +9,11 @@ Module MockDokoChikeServer
     ' ★★★ ABT 側の UdpReceiver が待ち受けているポートに合わせる ★★★
     Private Const AbtReceivePort As Integer = 50001   ' ← ここの値を ABT の設定と合わせる
 
-        ' ★ ヘルス応答を返すかどうかのフラグ
-    Private HealthOnline As Boolean = True
+' ★ 応答を返すかどうかのフラグ（機能別）
+Private HealthOnline As Boolean = True
+Private AuthOnline As Boolean = True
+Private JudgeOnline As Boolean = True
+Private TankOnline As Boolean = True
 
     Sub Main()
         Dim server As New UdpClient(51000)
@@ -51,32 +54,46 @@ Module MockDokoChikeServer
 
             Dim respBytes As Byte() = Nothing
 
-                    Select Case True
-                ' 認証データ要求 C3/00
-                Case (cmd = &HC3 AndAlso subc = &H0)
-                    respBytes = BuildAuthResponse(header, data, footer)
+Select Case True
+    ' 認証データ要求 C3/00
+    Case (cmd = &HC3 AndAlso subc = &H0)
+        If AuthOnline Then
+            respBytes = BuildAuthResponse(header, data, footer)
+        Else
+            Console.WriteLine("[Mock] AUTH OFFLINE: 応答を返さず無視します")
+            respBytes = Nothing
+        End If
 
-                ' ヘルスチェック D1/00
-                Case (cmd = &HD1 AndAlso subc = &H0)
-                    If HealthOnline Then
-                        respBytes = BuildHealthResponse(header)
-                    Else
-                        ' ★ オフライン時はあえて応答を返さない
-                        Console.WriteLine("[Mock] Health OFFLINE: 応答を返さず無視します")
-                        respBytes = Nothing
-                    End If
+    ' ヘルスチェック D1/00
+    Case (cmd = &HD1 AndAlso subc = &H0)
+        If HealthOnline Then
+            respBytes = BuildHealthResponse(header)
+        Else
+            Console.WriteLine("[Mock] Health OFFLINE: 応答を返さず無視します")
+            respBytes = Nothing
+        End If
 
-                ' 判定要求 A4/00
-                Case (cmd = &HA4 AndAlso subc = &H0)
-                    respBytes = BuildJudgmentResponse(header, data, footer)
+    ' 判定要求 A4/00
+    Case (cmd = &HA4 AndAlso subc = &H0)
+        If JudgeOnline Then
+            respBytes = BuildJudgmentResponse(header, data, footer)
+        Else
+            Console.WriteLine("[Mock] JUDGE OFFLINE: 応答を返さず無視します")
+            respBytes = Nothing
+        End If
 
-                ' タンキング A5/00
-                Case (cmd = &HA5 AndAlso subc = &H0)
-                    respBytes = BuildTankingResponse(header, data, footer)
+    ' タンキング A5/00
+    Case (cmd = &HA5 AndAlso subc = &H0)
+        If TankOnline Then
+            respBytes = BuildTankingResponse(header, data, footer)
+        Else
+            Console.WriteLine("[Mock] TANK OFFLINE: 応答を返さず無視します")
+            respBytes = Nothing
+        End If
 
-                Case Else
-                    Console.WriteLine($"未知コマンド: cmd={cmd:X2}, sub={subc:X2}")
-            End Select
+    Case Else
+        Console.WriteLine($"未知コマンド: cmd={cmd:X2}, sub={subc:X2}")
+End Select
 
             If respBytes IsNot Nothing Then
                 ' ★★ 重要：remoteEP ではなく、AbtReceivePort に固定 ★★
@@ -87,20 +104,55 @@ Module MockDokoChikeServer
         End While
     End Sub
 
-     Private Sub HealthModeLoop()
-        Console.WriteLine("[Mock] Health監視モード: '1' = ONLINE, '2' = OFFLINE 切り替え")
-        While True
-            Dim key = Console.ReadKey(True).KeyChar
-            Select Case key
-                Case "1"c
-                    HealthOnline = True
-                    Console.WriteLine("[Mock] Health ONLINE にしました（応答返す）")
-                Case "2"c
-                    HealthOnline = False
-                    Console.WriteLine("[Mock] Health OFFLINE にしました（応答返さない）")
-            End Select
-        End While
-    End Sub
+Private Sub HealthModeLoop()
+    Console.WriteLine("[Mock] 応答切替:")
+    Console.WriteLine(" 1=Health ON, 2=Health OFF")
+    Console.WriteLine(" 3=Auth   ON, 4=Auth   OFF")
+    Console.WriteLine(" 5=Judge  ON, 6=Judge  OFF")
+    Console.WriteLine(" 7=Tank   ON, 8=Tank   OFF")
+    Console.WriteLine(" 9=ALL ON, 0=ALL OFF")
+
+    While True
+        Dim key = Console.ReadKey(True).KeyChar
+        Select Case key
+            Case "1"c
+                HealthOnline = True
+                Console.WriteLine("[Mock] Health ONLINE（応答返す）")
+            Case "2"c
+                HealthOnline = False
+                Console.WriteLine("[Mock] Health OFFLINE（応答返さない）")
+
+            Case "3"c
+                AuthOnline = True
+                Console.WriteLine("[Mock] AUTH ONLINE（応答返す）")
+            Case "4"c
+                AuthOnline = False
+                Console.WriteLine("[Mock] AUTH OFFLINE（応答返さない）")
+
+            Case "5"c
+                JudgeOnline = True
+                Console.WriteLine("[Mock] JUDGE ONLINE（応答返す）")
+            Case "6"c
+                JudgeOnline = False
+                Console.WriteLine("[Mock] JUDGE OFFLINE（応答返さない）")
+
+            Case "7"c
+                TankOnline = True
+                Console.WriteLine("[Mock] TANK ONLINE（応答返す）")
+            Case "8"c
+                TankOnline = False
+                Console.WriteLine("[Mock] TANK OFFLINE（応答返さない）")
+
+            Case "9"c
+                HealthOnline = True : AuthOnline = True : JudgeOnline = True : TankOnline = True
+                Console.WriteLine("[Mock] ALL ONLINE（全部応答返す）")
+
+            Case "0"c
+                HealthOnline = False : AuthOnline = False : JudgeOnline = False : TankOnline = False
+                Console.WriteLine("[Mock] ALL OFFLINE（全部応答返さない）")
+        End Select
+    End While
+End Sub
 
     ' =========================
     ' 認証データのレスポンス
